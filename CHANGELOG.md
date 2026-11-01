@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-01
+
 ### Added
 
 - The window opens where it was last closed, maximized if it was
@@ -29,5 +31,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - "Install the service" in the window when it can't read the drives
 - `--version`
 
-[Unreleased]: https://github.com/Apostolique/ElephantSearch/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Apostolique/ElephantSearch/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Apostolique/ElephantSearch/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Apostolique/ElephantSearch/releases/tag/v0.1.0
