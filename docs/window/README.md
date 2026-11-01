@@ -14,6 +14,10 @@ Names compare one character at a time, so `page10.txt` lands above `page9.txt`.
 
 Right clicking a result shows Explorer's own menu for that file, so "Open with", "Send to", "Properties" and whatever your other programs added are all there. Open, open path and copy full path are on top.
 
+## Position
+
+The window opens where you last closed it, at the same size and maximized if it was. If that spot was on a screen that's no longer plugged in, it opens on one that is. The position is kept in `%LOCALAPPDATA%\ElephantSearch\window.txt`, so deleting that file puts it back to the default.
+
 ## Dark mode
 
 It follows the dark mode switch in Settings, even while it's open. `--theme light` or `--theme dark` picks one instead.

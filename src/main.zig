@@ -671,4 +671,5 @@ test {
     _ = @import("usn.zig");
     _ = @import("sizer.zig");
     _ = @import("install.zig");
+    _ = @import("placement.zig");
 }

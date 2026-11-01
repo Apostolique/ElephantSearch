@@ -257,9 +257,10 @@ pub fn defaultPath(gpa: std.mem.Allocator) ?[:0]u16 {
     return pathNamed(gpa, std.unicode.utf8ToUtf16LeStringLiteral("\\index.cache"));
 }
 
-/// The same directory under a different file name. Tests use it so that running
-/// them never touches the cache a real run left behind.
-fn pathNamed(gpa: std.mem.Allocator, file: [:0]const u16) ?[:0]u16 {
+/// The same directory under a different file name, for anything else this
+/// program keeps per user. Tests use it so that running them never touches
+/// what a real run left behind.
+pub fn pathNamed(gpa: std.mem.Allocator, file: [:0]const u16) ?[:0]u16 {
     const name = std.unicode.utf8ToUtf16LeStringLiteral("LOCALAPPDATA");
     const needed = w.GetEnvironmentVariableW(name, null, 0);
     if (needed == 0) return null;

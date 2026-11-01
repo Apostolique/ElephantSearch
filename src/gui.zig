@@ -27,6 +27,7 @@ const usn = @import("usn.zig");
 const explorer = @import("explorer.zig");
 const install = @import("install.zig");
 const pipe = @import("pipe.zig");
+const placement = @import("placement.zig");
 
 const class_name = std.unicode.utf8ToUtf16LeStringLiteral("ElephantSearchWindow");
 const app_name = std.unicode.utf8ToUtf16LeStringLiteral("ElephantSearch");
@@ -234,6 +235,14 @@ const Window = struct {
     /// under it, which would leave the same row standing for another file.
     renaming: ?u32 = null,
     dpi: u32 = 96,
+    /// Set while the window is being put back where it last closed. The
+    /// saved rect is already the right size for the screen it is on, so a
+    /// scaling change on the way there must not resize it again.
+    placing: bool = false,
+    /// The window's rect the last time it was neither maximized nor
+    /// minimized, in screen coordinates. Kept because a window snapped to an
+    /// edge still reports its rect from before the snap as its normal one.
+    shown_at: ?ui.Rect = null,
     /// One line of the interface font, in pixels. What the search box is
     /// sized from.
     line_height: i32 = 16,
@@ -431,10 +440,61 @@ const Window = struct {
         self.applyTheme();
         self.layout();
 
-        _ = ui.ShowWindow(hwnd, ui.SW_SHOW);
+        const maximized = self.restorePlacement();
+        _ = ui.ShowWindow(hwnd, if (maximized) ui.SW_SHOWMAXIMIZED else ui.SW_SHOW);
         _ = ui.UpdateWindow(hwnd);
         _ = ui.SetFocus(self.edit);
         _ = ui.SetTimer(hwnd, tick_id, tick_ms, null);
+    }
+
+    /// Whether this run's position is worth keeping. A made up drive or a
+    /// stand-in service is a test, and a test window is moved out of the way,
+    /// which is not where the next real one should open.
+    fn remembersPlacement(self: *const Window) bool {
+        return self.opts.startup.synthetic == 0 and self.opts.service_pipe == null;
+    }
+
+    /// Moves the still hidden window to where it last closed, and says
+    /// whether it should come up maximized.
+    fn restorePlacement(self: *Window) bool {
+        if (!self.remembersPlacement()) return false;
+        const saved = placement.load(self.gpa) orelse return false;
+        // Hidden for now: showing it is left to the caller, once the font
+        // matches whichever screen it landed on.
+        const place: ui.WindowPlacement = .{ .show = ui.SW_HIDE, .normal = saved.normal };
+        self.placing = true;
+        _ = ui.SetWindowPlacement(self.hwnd, &place);
+        self.placing = false;
+
+        const dpi = ui.GetDpiForWindow(self.hwnd);
+        if (dpi != 0 and dpi != self.dpi) {
+            self.dpi = dpi;
+            self.setFont();
+            self.layout();
+        }
+        return saved.maximized;
+    }
+
+    /// Writes down where the window is, for the next one to open there.
+    fn savePlacement(self: *Window) void {
+        if (!self.remembersPlacement()) return;
+        var place: ui.WindowPlacement = .{};
+        if (ui.GetWindowPlacement(self.hwnd, &place) == 0) return;
+        // Closed from the taskbar while minimized, it still had a size to go
+        // back to, and that is the one worth keeping.
+        const maximized = place.show == ui.SW_SHOWMAXIMIZED or
+            (place.show == ui.SW_SHOWMINIMIZED and place.flags & ui.WPF_RESTORETOMAXIMIZED != 0);
+        var normal = place.normal;
+        if (!maximized) {
+            if (self.shown_at) |at| normal = toWorkspace(at);
+        }
+        placement.save(self.gpa, .{ .normal = normal, .maximized = maximized });
+    }
+
+    fn noteRect(self: *Window) void {
+        if (ui.IsZoomed(self.hwnd) != 0 or ui.IsIconic(self.hwnd) != 0) return;
+        var at: ui.Rect = undefined;
+        if (ui.GetWindowRect(self.hwnd, &at) != 0) self.shown_at = at;
     }
 
     /// Builds the interface font at the current scaling and hands it to both
@@ -1326,6 +1386,8 @@ const Window = struct {
     fn installed(self: *Window, outcome: install.Outcome) void {
         self.joinInstaller();
         if (outcome == .installed) {
+            // Before the new window is started, since it reads this as it opens.
+            self.savePlacement();
             if (shell.relaunchPlain(self.gpa, self.hwnd)) {
                 _ = ui.DestroyWindow(self.hwnd);
                 return;
@@ -1340,6 +1402,8 @@ const Window = struct {
     /// arguments, and closes this one once it is up. This one never saves a
     /// cache it could not keep current, so the two never write the same file.
     fn elevate(self: *Window) void {
+        // Before the new window is started, since it reads this as it opens.
+        self.savePlacement();
         if (shell.relaunchElevated(self.gpa, self.hwnd)) {
             _ = ui.DestroyWindow(self.hwnd);
         } else {
@@ -1444,7 +1508,12 @@ const Window = struct {
 
         switch (msg) {
             ui.WM_SIZE => {
+                self.noteRect();
                 self.layout();
+                return 0;
+            },
+            ui.WM_MOVE => {
+                self.noteRect();
                 return 0;
             },
             ui.WM_PAINT => {
@@ -1531,7 +1600,7 @@ const Window = struct {
             ui.WM_DPICHANGED => {
                 self.dpi = @truncate(wparam & 0xFFFF);
                 const want: *const ui.Rect = @ptrFromInt(@as(usize, @bitCast(lparam)));
-                _ = ui.SetWindowPos(
+                if (!self.placing) _ = ui.SetWindowPos(
                     hwnd,
                     null,
                     want.left,
@@ -1562,6 +1631,7 @@ const Window = struct {
                 return 0;
             },
             ui.WM_DESTROY => {
+                self.savePlacement();
                 _ = ui.KillTimer(hwnd, tick_id);
                 ui.PostQuitMessage(0);
                 return 0;
@@ -1990,6 +2060,18 @@ const Window = struct {
 };
 
 // ---- window procedures ----
+
+/// Placements are measured from the top left of the work area of the screen
+/// the window is on rather than of the screen itself, which only differs when
+/// the taskbar sits along the top or the left.
+fn toWorkspace(at: ui.Rect) ui.Rect {
+    const monitor = ui.MonitorFromRect(&at, ui.MONITOR_DEFAULTTONEAREST) orelse return at;
+    var info: ui.MonitorInfo = .{};
+    if (ui.GetMonitorInfoW(monitor, &info) == 0) return at;
+    const dx = info.work.left - info.monitor.left;
+    const dy = info.work.top - info.monitor.top;
+    return .{ .left = at.left - dx, .top = at.top - dy, .right = at.right - dx, .bottom = at.bottom - dy };
+}
 
 fn wndProc(hwnd: ui.HANDLE, msg: u32, wparam: ui.Wparam, lparam: ui.Lparam) callconv(.winapi) ui.Lresult {
     const raw = ui.GetWindowLongPtrW(hwnd, ui.GWLP_USERDATA);

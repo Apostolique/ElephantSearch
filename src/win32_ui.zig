@@ -355,6 +355,45 @@ pub extern "user32" fn SetWindowPos(
 pub const SWP_NOZORDER: u32 = 0x0004;
 pub const SWP_NOACTIVATE: u32 = 0x0010;
 
+/// Where a window sits when it is neither maximized nor minimized, along with
+/// which of the three it is. The rect is in workspace coordinates, which only
+/// matters for handing it back to `SetWindowPlacement`, and that is all it is
+/// used for.
+pub const WindowPlacement = extern struct {
+    length: u32 = @sizeOf(WindowPlacement),
+    flags: u32 = 0,
+    show: u32 = 0,
+    min_position: Point = .{ .x = 0, .y = 0 },
+    max_position: Point = .{ .x = 0, .y = 0 },
+    normal: Rect = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 },
+};
+
+/// Set in `WindowPlacement.flags` when a minimized window goes back to being
+/// maximized rather than to its normal rect.
+pub const WPF_RESTORETOMAXIMIZED: u32 = 0x0002;
+
+pub extern "user32" fn GetWindowRect(hWnd: HANDLE, lpRect: *Rect) callconv(.winapi) BOOL;
+pub extern "user32" fn IsZoomed(hWnd: HANDLE) callconv(.winapi) BOOL;
+pub extern "user32" fn IsIconic(hWnd: HANDLE) callconv(.winapi) BOOL;
+
+pub const MonitorInfo = extern struct {
+    size: u32 = @sizeOf(MonitorInfo),
+    monitor: Rect = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 },
+    /// The monitor minus the taskbar and anything else docked to its edges.
+    work: Rect = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 },
+    flags: u32 = 0,
+};
+
+pub const MONITOR_DEFAULTTONEAREST: u32 = 0x0002;
+
+pub extern "user32" fn MonitorFromRect(lprc: *const Rect, dwFlags: u32) callconv(.winapi) ?HANDLE;
+pub extern "user32" fn GetMonitorInfoW(hMonitor: HANDLE, lpmi: *MonitorInfo) callconv(.winapi) BOOL;
+
+pub extern "user32" fn GetWindowPlacement(hWnd: HANDLE, lpwndpl: *WindowPlacement) callconv(.winapi) BOOL;
+/// Moves a window that would land entirely off every screen back onto one,
+/// which is what makes a saved position safe after a monitor is unplugged.
+pub extern "user32" fn SetWindowPlacement(hWnd: HANDLE, lpwndpl: *const WindowPlacement) callconv(.winapi) BOOL;
+
 pub extern "user32" fn GetWindowTextLengthW(hWnd: HANDLE) callconv(.winapi) i32;
 pub extern "user32" fn GetWindowTextW(hWnd: HANDLE, lpString: [*]u16, nMaxCount: i32) callconv(.winapi) i32;
 pub extern "user32" fn SetWindowTextW(hWnd: HANDLE, lpString: [*:0]const u16) callconv(.winapi) BOOL;
@@ -633,6 +672,9 @@ pub const WS_CLIPCHILDREN: DWORD = 0x0200_0000;
 
 pub const ES_AUTOHSCROLL: DWORD = 0x0080;
 
+pub const SW_HIDE: i32 = 0;
+pub const SW_SHOWMINIMIZED: i32 = 2;
+pub const SW_SHOWMAXIMIZED: i32 = 3;
 pub const SW_SHOW: i32 = 5;
 
 pub const MB_OK: u32 = 0x0000;
@@ -642,6 +684,7 @@ pub const MB_ICONINFORMATION: u32 = 0x0040;
 pub const GWLP_USERDATA: i32 = -21;
 
 pub const WM_DESTROY: u32 = 0x0002;
+pub const WM_MOVE: u32 = 0x0003;
 pub const WM_SIZE: u32 = 0x0005;
 pub const WM_SETFOCUS: u32 = 0x0007;
 pub const WM_PAINT: u32 = 0x000F;
