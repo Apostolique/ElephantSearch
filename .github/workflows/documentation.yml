@@ -1,0 +1,45 @@
+name: Build documentation
+
+on:
+  push:
+    branches:
+    - 'main'
+    paths:
+    - 'docs/**'
+    - 'README.md'
+    - 'CHANGELOG.md'
+    - '.github/workflows/documentation.yml'
+  workflow_dispatch:
+
+env:
+  TITLE: ElephantSearch
+  DESCRIPTION: Instant filename search for Windows.
+  BASE: ElephantSearch
+  REPO: https://github.com/Apostolique/ElephantSearch/tree/main/
+  URL: https://apostolique.github.io/ElephantSearch/
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v7
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22.x'
+    - name: Install apos-docs
+      run: npm install apos-docs@^0.7.0 -g
+    - name: Use apos-docs
+      run: |
+        apos-docs -t '${{ env.TITLE }}' -d '${{ env.DESCRIPTION }}' -b '${{ env.BASE }}' -r '${{ env.REPO }}' -u '${{ env.URL }}'
+        cd apos-docs
+        npm ci
+        npm run build
+        cd -
+    - name: Deploy
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./apos-docs/_site

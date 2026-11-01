@@ -1,0 +1,46 @@
+#include "version.h"
+
+// Id 1 because the shell shows the lowest numbered icon in an executable as
+// the file's own icon, and this is the only one there is.
+1 ICON "elephant.ico"
+
+// What Explorer shows under Properties > Details, and what Task Manager names
+// the process by.
+1 VERSIONINFO
+FILEVERSION ES_VERSION
+PRODUCTVERSION ES_VERSION
+FILEFLAGSMASK 0x3F
+FILEFLAGS 0
+FILEOS 0x40004
+FILETYPE 1
+FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Jean-David Moisan"
+#if defined(ES_WINDOW)
+            VALUE "FileDescription", "ElephantSearch"
+            VALUE "InternalName", "elephant-gui"
+            VALUE "OriginalFilename", "elephant-gui.exe"
+#elif defined(ES_SERVICE)
+            VALUE "FileDescription", "ElephantSearch service"
+            VALUE "InternalName", "elephant-service"
+            VALUE "OriginalFilename", "elephant-service.exe"
+#else
+            VALUE "FileDescription", "ElephantSearch in a terminal"
+            VALUE "InternalName", "elephant"
+            VALUE "OriginalFilename", "elephant.exe"
+#endif
+            VALUE "FileVersion", ES_VERSION_STR
+            VALUE "LegalCopyright", "Copyright (c) 2026 Jean-David Moisan. MIT License."
+            VALUE "ProductName", "ElephantSearch"
+            VALUE "ProductVersion", ES_VERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

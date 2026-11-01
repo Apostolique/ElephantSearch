@@ -1,0 +1,60 @@
+name: Release to GitHub
+
+on:
+  push:
+    tags:
+    - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+    - uses: actions/checkout@v7
+    - name: Setup Zig
+      uses: mlugg/setup-zig@v2
+      with:
+        version: 0.16.0
+    - name: Check the tag against build.zig.zon
+      run: |
+        $version = $env:GITHUB_REF_NAME.Substring(1)
+        $zon = Select-String -Path build.zig.zon -Pattern '\.version = "([^"]+)"'
+        $declared = $zon.Matches[0].Groups[1].Value
+        if ($declared -ne $version) {
+          throw "The tag says $version while build.zig.zon says $declared."
+        }
+        "VERSION=$version" >> $env:GITHUB_ENV
+    - name: Test
+      run: zig build test --summary all
+    # A target without a CPU model builds for the baseline x86-64, so the
+    # binaries run on any 64-bit machine rather than only on ones like the
+    # runner.
+    - name: Build
+      run: zig build -Dtarget=x86_64-windows
+    - name: Package
+      run: |
+        $name = "ElephantSearch-$env:VERSION-windows-x64"
+        New-Item -ItemType Directory $name | Out-Null
+        Copy-Item zig-out/bin/elephant.exe, zig-out/bin/elephant-gui.exe, zig-out/bin/elephant-service.exe, README.md, LICENSE, CHANGELOG.md $name
+        Compress-Archive -Path $name -DestinationPath "$name.zip"
+        "ARCHIVE=$name.zip" >> $env:GITHUB_ENV
+    - name: Release notes from CHANGELOG.md
+      run: |
+        $lines = Get-Content CHANGELOG.md
+        $start = [Array]::FindIndex($lines, [Predicate[string]]{ param($l) $l -like "## ``[$env:VERSION``]*" })
+        if ($start -lt 0) { throw "CHANGELOG.md has no section for $env:VERSION." }
+        $end = [Array]::FindIndex($lines, $start + 1, [Predicate[string]]{ param($l) $l -like '## *' })
+        if ($end -lt 0) { $end = $lines.Length }
+        $lines[($start + 1)..($end - 1)] -join "`n" | Out-File -Encoding utf8 notes.md
+    - name: Publish
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh release create $env:GITHUB_REF_NAME $env:ARCHIVE --title "ElephantSearch $env:VERSION" --notes-file notes.md
