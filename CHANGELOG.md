@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-01
+
 ### Added
 
 - Filename search over every fixed NTFS drive, read straight from the master file table
@@ -22,3 +24,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - A background service that reads the drives, so searching needs no administrator rights, with `--install-service` and `--uninstall-service`
 - "Install the service" in the window when it can't read the drives
 - `--version`
+
+[Unreleased]: https://github.com/Apostolique/ElephantSearch/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Apostolique/ElephantSearch/releases/tag/v0.1.0
