@@ -43,7 +43,13 @@ jobs:
       run: |
         $name = "ElephantSearch-$env:VERSION-windows-x64"
         New-Item -ItemType Directory $name | Out-Null
-        Copy-Item zig-out/bin/elephant.exe, zig-out/bin/elephant-gui.exe, zig-out/bin/elephant-service.exe, README.md, LICENSE, CHANGELOG.md $name
+        Copy-Item zig-out/bin/elephant.exe, zig-out/bin/elephant-gui.exe, zig-out/bin/elephant-service.exe, LICENSE, CHANGELOG.md $name
+        # The README links into docs/ by relative path, which only works on
+        # GitHub and the docs site, so the zipped copy points at both instead.
+        (Get-Content -Raw README.md) `
+          -replace '\]\(docs/([^)]+\.(png|jpg|gif))\)', "](https://raw.githubusercontent.com/Apostolique/ElephantSearch/$env:GITHUB_REF_NAME/docs/`$1)" `
+          -replace '\]\(docs/([^)]+?)/README\.md\)', '](https://apostolique.github.io/ElephantSearch/$1/)' |
+          Set-Content -NoNewline "$name/README.md"
         Compress-Archive -Path $name -DestinationPath "$name.zip"
         "ARCHIVE=$name.zip" >> $env:GITHUB_ENV
     - name: Release notes from CHANGELOG.md
