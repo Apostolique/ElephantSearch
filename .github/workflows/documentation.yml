@@ -11,6 +11,9 @@ on:
     - '.github/workflows/documentation.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   TITLE: ElephantSearch
   DESCRIPTION: Instant filename search for Windows.
