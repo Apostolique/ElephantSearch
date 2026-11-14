@@ -1974,6 +1974,9 @@ const Window = struct {
     /// results while the caret stays where the typing goes.
     fn editKey(self: *Window, vk: u16) bool {
         const ctrl = ctrlDown();
+        // AltGr holds ctrl down too, and on some layouts AltGr and a letter
+        // types a character.
+        const shortcut = ctrl and !altDown();
         switch (vk) {
             w.VK_UP => self.moveSelection(-1),
             w.VK_DOWN => self.moveSelection(1),
@@ -1998,11 +2001,33 @@ const Window = struct {
             'C' => {
                 // Copying the path is what a file search is for, but not at the
                 // cost of copying text the user deliberately selected first.
-                if (!ctrl or self.editHasSelection()) return false;
-                self.copySelected();
+                if (!shortcut) return false;
+                if (self.editHasSelection()) {
+                    _ = ui.SendMessageW(self.edit, ui.WM_COPY, 0, 0);
+                } else {
+                    self.copySelected();
+                }
+            },
+            // The box does these itself on the control character that follows,
+            // but that character is thrown away in `editProc`.
+            'A' => {
+                if (!shortcut) return false;
+                _ = ui.SendMessageW(self.edit, ui.EM_SETSEL, 0, -1);
+            },
+            'V' => {
+                if (!shortcut) return false;
+                _ = ui.SendMessageW(self.edit, ui.WM_PASTE, 0, 0);
+            },
+            'X' => {
+                if (!shortcut) return false;
+                _ = ui.SendMessageW(self.edit, ui.WM_CUT, 0, 0);
+            },
+            'Z' => {
+                if (!shortcut) return false;
+                _ = ui.SendMessageW(self.edit, ui.EM_UNDO, 0, 0);
             },
             'Q' => {
-                if (!ctrl) return false;
+                if (!shortcut) return false;
                 _ = ui.DestroyWindow(self.hwnd);
             },
             else => return false,
@@ -2173,10 +2198,23 @@ fn listProc(
                 _ = ui.SetFocus(self.edit);
                 return 0;
             }
-            if (ctrlDown() and (vk == 'C' or vk == 'Q')) {
-                if (vk == 'C') self.copySelected() else _ = ui.DestroyWindow(self.hwnd);
-                return 0;
-            }
+            if (ctrlDown() and !altDown()) switch (vk) {
+                'C' => {
+                    self.copySelected();
+                    return 0;
+                },
+                'Q' => {
+                    _ = ui.DestroyWindow(self.hwnd);
+                    return 0;
+                },
+                // Pasting or selecting means the query, like typing does.
+                'V', 'A' => {
+                    _ = ui.SetFocus(self.edit);
+                    _ = self.editKey(vk);
+                    return 0;
+                },
+                else => {},
+            };
         },
         else => {},
     }
@@ -2250,6 +2288,10 @@ fn loadIcon(instance: ui.HANDLE, cx: i32, cy: i32) ?ui.HANDLE {
 
 fn ctrlDown() bool {
     return ui.GetKeyState(ui.VK_CONTROL) < 0;
+}
+
+fn altDown() bool {
+    return ui.GetKeyState(ui.VK_MENU) < 0;
 }
 
 fn shiftDown() bool {

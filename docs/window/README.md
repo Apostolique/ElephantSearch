@@ -2,6 +2,10 @@
 
 `elephant-gui.exe` is the same search as the terminal, in a window. Each result has the icon Explorer would show, with columns for the size and the date. It takes the same [keys and commands](../searching/README.md).
 
+## Search box
+
+The search box takes the usual text keys. Ctrl+a selects the query, ctrl+x and ctrl+v cut and paste, and ctrl+z undoes. Ctrl+c copies the text you selected in the box, and the selected result's path when nothing is selected. Pasting or ctrl+a while the results have focus goes back to the search box.
+
 ## Sorting
 
 Click a column heading to sort on it. Name and Path sort A to Z while Size and Modified start with the biggest and the newest. Click again to reverse it, and a third time to go back to ranking by how well the query matched. The sort stays while you type.

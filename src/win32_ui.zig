@@ -723,6 +723,10 @@ pub const EN_CHANGE: u16 = 0x0300;
 pub const EM_GETSEL: u32 = 0x00B0;
 pub const EM_SETSEL: u32 = 0x00B1;
 pub const EM_REPLACESEL: u32 = 0x00C2;
+pub const EM_UNDO: u32 = 0x00C7;
+pub const WM_CUT: u32 = 0x0300;
+pub const WM_COPY: u32 = 0x0301;
+pub const WM_PASTE: u32 = 0x0302;
 /// ECM_FIRST + 1. The grey placeholder an empty search box shows.
 pub const EM_SETCUEBANNER: u32 = 0x1501;
 
@@ -731,6 +735,7 @@ pub const VK_SHIFT: i32 = 0x10;
 pub const VK_APPS: u16 = 0x5D;
 pub const VK_F10: u16 = 0x79;
 pub const VK_CONTROL: i32 = 0x11;
+pub const VK_MENU: i32 = 0x12;
 
 pub const TRANSPARENT: i32 = 1;
 

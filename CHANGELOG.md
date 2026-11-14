@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Ctrl+a, ctrl+c, ctrl+x, ctrl+v and ctrl+z in the window's search box
+
 ## [0.2.0] - 2026-11-01
 
 ### Added
