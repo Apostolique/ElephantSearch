@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-14
+
 ### Fixed
 
 - Ctrl+a, ctrl+c, ctrl+x, ctrl+v and ctrl+z in the window's search box
@@ -35,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - "Install the service" in the window when it can't read the drives
 - `--version`
 
-[Unreleased]: https://github.com/Apostolique/ElephantSearch/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Apostolique/ElephantSearch/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Apostolique/ElephantSearch/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Apostolique/ElephantSearch/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Apostolique/ElephantSearch/releases/tag/v0.1.0
