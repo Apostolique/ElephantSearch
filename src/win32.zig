@@ -862,3 +862,69 @@ comptime {
 
 pub extern "shell32" fn ShellExecuteExW(pExecInfo: *ShellExecuteInfo) callconv(.winapi) BOOL;
 pub extern "kernel32" fn GetExitCodeProcess(hProcess: HANDLE, lpExitCode: *DWORD) callconv(.winapi) BOOL;
+
+// ---- WinHTTP, for checking for a newer release ----
+
+pub const HINTERNET = *anyopaque;
+
+/// The proxy Windows itself is set up with, found the way the system finds it.
+pub const WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY: DWORD = 4;
+pub const WINHTTP_FLAG_SECURE: DWORD = 0x0080_0000;
+pub const WINHTTP_QUERY_STATUS_CODE: DWORD = 19;
+pub const WINHTTP_QUERY_FLAG_NUMBER: DWORD = 0x2000_0000;
+pub const INTERNET_DEFAULT_HTTPS_PORT: u16 = 443;
+
+pub extern "winhttp" fn WinHttpOpen(
+    pszAgentW: ?[*:0]const u16,
+    dwAccessType: DWORD,
+    pszProxyW: ?[*:0]const u16,
+    pszProxyBypassW: ?[*:0]const u16,
+    dwFlags: DWORD,
+) callconv(.winapi) ?HINTERNET;
+
+pub extern "winhttp" fn WinHttpConnect(
+    hSession: HINTERNET,
+    pswzServerName: [*:0]const u16,
+    nServerPort: u16,
+    dwReserved: DWORD,
+) callconv(.winapi) ?HINTERNET;
+
+pub extern "winhttp" fn WinHttpOpenRequest(
+    hConnect: HINTERNET,
+    pwszVerb: ?[*:0]const u16,
+    pwszObjectName: ?[*:0]const u16,
+    pwszVersion: ?[*:0]const u16,
+    pwszReferrer: ?[*:0]const u16,
+    ppwszAcceptTypes: ?*const ?[*:0]const u16,
+    dwFlags: DWORD,
+) callconv(.winapi) ?HINTERNET;
+
+pub extern "winhttp" fn WinHttpSendRequest(
+    hRequest: HINTERNET,
+    lpszHeaders: ?[*]const u16,
+    dwHeadersLength: DWORD,
+    lpOptional: ?*anyopaque,
+    dwOptionalLength: DWORD,
+    dwTotalLength: DWORD,
+    dwContext: usize,
+) callconv(.winapi) BOOL;
+
+pub extern "winhttp" fn WinHttpReceiveResponse(hRequest: HINTERNET, lpReserved: ?*anyopaque) callconv(.winapi) BOOL;
+
+pub extern "winhttp" fn WinHttpQueryHeaders(
+    hRequest: HINTERNET,
+    dwInfoLevel: DWORD,
+    pwszName: ?[*:0]const u16,
+    lpBuffer: ?*anyopaque,
+    lpdwBufferLength: *DWORD,
+    lpdwIndex: ?*DWORD,
+) callconv(.winapi) BOOL;
+
+pub extern "winhttp" fn WinHttpReadData(
+    hRequest: HINTERNET,
+    lpBuffer: *anyopaque,
+    dwNumberOfBytesToRead: DWORD,
+    lpdwNumberOfBytesRead: *DWORD,
+) callconv(.winapi) BOOL;
+
+pub extern "winhttp" fn WinHttpCloseHandle(hInternet: HINTERNET) callconv(.winapi) BOOL;

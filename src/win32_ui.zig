@@ -680,6 +680,9 @@ pub const SW_SHOW: i32 = 5;
 pub const MB_OK: u32 = 0x0000;
 pub const MB_ICONERROR: u32 = 0x0010;
 pub const MB_ICONINFORMATION: u32 = 0x0040;
+pub const MB_YESNO: u32 = 0x0004;
+pub const MB_ICONQUESTION: u32 = 0x0020;
+pub const IDYES: i32 = 6;
 
 pub const GWLP_USERDATA: i32 = -21;
 

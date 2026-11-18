@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- "Check for updates" in the window menu, which downloads the latest release and swaps it in place
+
 ## [0.2.1] - 2026-11-14
 
 ### Fixed

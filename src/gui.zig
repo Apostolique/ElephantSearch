@@ -28,6 +28,7 @@ const explorer = @import("explorer.zig");
 const install = @import("install.zig");
 const pipe = @import("pipe.zig");
 const placement = @import("placement.zig");
+const update = @import("update.zig");
 
 const class_name = std.unicode.utf8ToUtf16LeStringLiteral("ElephantSearchWindow");
 const app_name = std.unicode.utf8ToUtf16LeStringLiteral("ElephantSearch");
@@ -39,6 +40,11 @@ const pool: usize = 500;
 /// How often the change journal and the size pass get a look in.
 const tick_ms: u32 = 250;
 const tick_id: usize = 1;
+
+/// Long enough after starting for the window an update replaced to have
+/// closed, so the files it ran from can go.
+const clean_up_ms: u32 = 5000;
+const clean_up_id: usize = 2;
 
 /// Least time between two searches caused by the journal rather than by a
 /// keystroke. A busy machine writes files continuously, and re-running a query
@@ -54,6 +60,15 @@ const wm_icon: u32 = ui.WM_APP + 2;
 /// Posted by the installer thread once the elevated install has finished,
 /// with its outcome in `wparam`.
 const wm_installed: u32 = ui.WM_APP + 3;
+/// Posted by the updater thread once GitHub has answered, with a `Checked` in
+/// `wparam`.
+const wm_update_checked: u32 = ui.WM_APP + 4;
+/// Posted by the updater thread once the new files are in place, or once that
+/// failed. `wparam` is 1 when they are, and `lparam` is how the service install
+/// went.
+const wm_updated: u32 = ui.WM_APP + 5;
+
+const Checked = enum(usize) { latest, newer, failed };
 
 const id_edit: usize = 100;
 const id_list: usize = 101;
@@ -63,9 +78,11 @@ const id_list: usize = 101;
 const id_elevate: usize = 0x0010;
 /// The same for installing the service.
 const id_install: usize = 0x0020;
+const id_update: usize = 0x0030;
 
 const elevate_label = "Run as administrator";
 const install_label = "Install the service";
+const update_label = "Check for updates";
 
 /// Runs of matched and unmatched characters a cell is drawn in. A query that
 /// alternates more often than this is not one anyone is reading letter by
@@ -131,7 +148,7 @@ const columns = [_]Column{
 
 /// Runs the window until it is closed. Owns the index for its whole life,
 /// because the loader thread writes into it and the message loop reads it.
-pub fn run(gpa: std.mem.Allocator, opts: Options) !void {
+pub fn run(gpa: std.mem.Allocator, io: std.Io, opts: Options) !void {
     // Before any window exists, so the first one is already the right way
     // round rather than flipping once it is on screen.
     theme.init(switch (opts.appearance) {
@@ -175,6 +192,7 @@ pub fn run(gpa: std.mem.Allocator, opts: Options) !void {
 
     var win: Window = .{
         .gpa = gpa,
+        .io = io,
         .opts = chosen,
         .service = choice.service,
         .index = &index,
@@ -199,6 +217,7 @@ pub fn run(gpa: std.mem.Allocator, opts: Options) !void {
     // it is writing into is about to be freed, so this waits it out.
     win.joinLoader();
     win.joinInstaller();
+    win.joinUpdater();
 
     monitor.stop();
     sizer.stop();
@@ -208,6 +227,7 @@ pub fn run(gpa: std.mem.Allocator, opts: Options) !void {
 
 const Window = struct {
     gpa: std.mem.Allocator,
+    io: std.Io,
     opts: Options,
     index: *idx.Index,
     searcher: *search.Searcher,
@@ -266,6 +286,13 @@ const Window = struct {
     can_install: bool = false,
     install_rect: ui.Rect = .{ .left = 0, .top = 0, .right = 0, .bottom = 0 },
     installer: ?std.Thread = null,
+    /// Checks for an update, then downloads it. The fields after it are its
+    /// answer, written before it posts and read once it has been joined.
+    updater: ?std.Thread = null,
+    release: ?update.Release = null,
+    update_error: anyerror = error.Unexpected,
+    /// Whether the update reinstalls the service once the files are in place.
+    update_service: bool = false,
     /// Set from the start of the size pass until the tick after it ends, so
     /// the rows on screen get drawn once more with whatever landed last.
     sizes_unseen: bool = false,
@@ -346,18 +373,21 @@ const Window = struct {
         self.can_elevate = !shell.isElevated();
         self.can_install = self.can_elevate and self.opts.service_pipe == null and
             (self.service == .missing or self.service == .outdated);
-        if (self.can_elevate) {
-            // In the window menu as well as in the status line, so it can be
-            // reached from the keyboard with alt+space.
-            if (ui.GetSystemMenu(hwnd, 0)) |sys| {
-                _ = ui.AppendMenuW(sys, ui.MF_SEPARATOR, 0, null);
-                if (self.can_install) {
-                    const install_text = std.unicode.utf8ToUtf16LeStringLiteral(install_label);
-                    _ = ui.AppendMenuW(sys, ui.MF_STRING, id_install, install_text);
-                }
+        // In the window menu, so it can be reached from the keyboard with
+        // alt+space. The elevation offers are in the status line as well.
+        if (ui.GetSystemMenu(hwnd, 0)) |sys| {
+            _ = ui.AppendMenuW(sys, ui.MF_SEPARATOR, 0, null);
+            if (self.can_install) {
+                const install_text = std.unicode.utf8ToUtf16LeStringLiteral(install_label);
+                _ = ui.AppendMenuW(sys, ui.MF_STRING, id_install, install_text);
+            }
+            if (self.can_elevate) {
                 const label = std.unicode.utf8ToUtf16LeStringLiteral(elevate_label);
                 _ = ui.AppendMenuW(sys, ui.MF_STRING, id_elevate, label);
             }
+            _ = ui.AppendMenuW(sys, ui.MF_STRING, id_update, std.unicode.utf8ToUtf16LeStringLiteral(update_label));
+        }
+        if (self.can_elevate) {
             var info: ui.StockIconInfo = .{};
             if (ui.SHGetStockIconInfo(ui.SIID_SHIELD, ui.SHGSI_SYSICONINDEX | ui.SHGSI_SMALLICON, &info) >= 0) {
                 self.shield = info.sys_image_index;
@@ -445,6 +475,7 @@ const Window = struct {
         _ = ui.UpdateWindow(hwnd);
         _ = ui.SetFocus(self.edit);
         _ = ui.SetTimer(hwnd, tick_id, tick_ms, null);
+        _ = ui.SetTimer(hwnd, clean_up_id, clean_up_ms, null);
     }
 
     /// Whether this run's position is worth keeping. A made up drive or a
@@ -584,6 +615,7 @@ const Window = struct {
         if (self.font) |f| _ = ui.DeleteObject(f);
         if (self.bold) |f| _ = ui.DeleteObject(f);
         if (self.ready.cache_path) |p| self.gpa.free(p);
+        if (self.release) |*r| r.deinit();
     }
 
     // ---- reading the drives ----
@@ -1398,6 +1430,138 @@ const Window = struct {
         self.say("{s}", .{outcome.describe()});
     }
 
+    // ---- updating ----
+
+    /// Asks GitHub on a thread of its own, since a slow network would freeze
+    /// the window otherwise.
+    fn checkForUpdates(self: *Window) void {
+        if (self.updater != null) return;
+        self.updater = std.Thread.spawn(.{}, runCheck, .{self}) catch {
+            self.say("could not check for updates", .{});
+            return;
+        };
+        self.say("checking for updates", .{});
+    }
+
+    fn runCheck(self: *Window) void {
+        const found: Checked = if (update.check(self.gpa)) |release| blk: {
+            self.release = release;
+            break :blk if (release == null) .latest else .newer;
+        } else |e| blk: {
+            self.update_error = e;
+            break :blk .failed;
+        };
+        _ = ui.PostMessageW(self.hwnd, wm_update_checked, @intFromEnum(found), 0);
+    }
+
+    fn joinUpdater(self: *Window) void {
+        if (self.updater) |t| t.join();
+        self.updater = null;
+    }
+
+    fn dropRelease(self: *Window) void {
+        if (self.release) |*r| r.deinit();
+        self.release = null;
+    }
+
+    fn checked(self: *Window, found: Checked) void {
+        self.joinUpdater();
+        switch (found) {
+            .latest => self.say("{s} is the latest version", .{update.current}),
+            .failed => self.sayUpdateError(),
+            .newer => self.offerUpdate(),
+        }
+    }
+
+    fn offerUpdate(self: *Window) void {
+        const release = &(self.release orelse return);
+        // A made up drive or a stand-in service is a test, which leaves the
+        // real service alone.
+        self.update_service = self.remembersPlacement() and install.isInstalled();
+
+        var buf: [512]u8 = undefined;
+        const text = std.fmt.bufPrint(&buf, "ElephantSearch {s} is out, you have {s}.\n\nUpdate now? The window opens again once it's done.{s}", .{
+            release.version,
+            update.current,
+            if (self.update_service) "\n\nWindows will ask for administrator rights to update the service." else "",
+        }) catch return;
+        if (self.ask(text) != ui.IDYES) {
+            self.dropRelease();
+            self.say("not updated", .{});
+            return;
+        }
+
+        self.updater = std.Thread.spawn(.{}, runUpdate, .{self}) catch {
+            self.dropRelease();
+            self.say("could not start the update", .{});
+            return;
+        };
+        self.say("updating to {s}", .{release.version});
+    }
+
+    fn runUpdate(self: *Window) void {
+        update.apply(self.gpa, self.io, &self.release.?) catch |e| {
+            self.update_error = e;
+            _ = ui.PostMessageW(self.hwnd, wm_updated, 0, 0);
+            return;
+        };
+        const service: install.Outcome = if (!self.update_service) .not_installed else blk: {
+            const exe = explorer.besideThis(self.gpa, "elephant.exe") catch break :blk .service_missing;
+            defer self.gpa.free(exe);
+            break :blk install.applyElevated(self.gpa, self.hwnd, exe, .install);
+        };
+        _ = ui.PostMessageW(self.hwnd, wm_updated, 1, @intFromEnum(service));
+    }
+
+    fn updated(self: *Window, ok: bool, service: install.Outcome) void {
+        self.joinUpdater();
+        var version_buf: [32]u8 = undefined;
+        const version = if (self.release) |r| std.fmt.bufPrint(&version_buf, "{s}", .{r.version}) catch "" else "";
+        self.dropRelease();
+        if (!ok) {
+            self.sayUpdateError();
+            return;
+        }
+        if (!service.succeeded()) {
+            var buf: [512]u8 = undefined;
+            const text = std.fmt.bufPrint(&buf, "ElephantSearch is updated to {s} while the service isn't, since {s}.\n\n\"Install the service\" in the window menu updates it.", .{
+                version,
+                service.describe(),
+            }) catch "The service isn't updated.";
+            self.tell(text);
+        }
+        // Before the new window is started, since it reads this as it opens.
+        self.savePlacement();
+        if (shell.relaunchPlain(self.gpa, self.hwnd)) {
+            _ = ui.DestroyWindow(self.hwnd);
+            return;
+        }
+        self.say("updated to {s}, open the window again to use it", .{version});
+    }
+
+    fn sayUpdateError(self: *Window) void {
+        if (update.describe(self.update_error)) |words| {
+            self.say("{s}", .{words});
+        } else {
+            self.say("the update failed, {s}", .{@errorName(self.update_error)});
+        }
+    }
+
+    fn ask(self: *Window, text: []const u8) i32 {
+        return self.messageBox(text, ui.MB_YESNO | ui.MB_ICONQUESTION);
+    }
+
+    fn tell(self: *Window, text: []const u8) void {
+        _ = self.messageBox(text, ui.MB_OK | ui.MB_ICONINFORMATION);
+    }
+
+    fn messageBox(self: *Window, text: []const u8, flags: u32) i32 {
+        var wide: [1024]u16 = undefined;
+        const n = std.unicode.wtf8ToWtf16Le(wide[0 .. wide.len - 1], text) catch return 0;
+        wide[n] = 0;
+        return ui.MessageBoxW(self.hwnd, @ptrCast(wide[0..n :0].ptr), app_name, flags);
+    }
+
     /// Starts over with administrator rights, handing the new window the same
     /// arguments, and closes this one once it is up. This one never saves a
     /// cache it could not keep current, so the two never write the same file.
@@ -1565,6 +1729,10 @@ const Window = struct {
                     self.installService();
                     return 0;
                 }
+                if (wparam & 0xFFF0 == id_update) {
+                    self.checkForUpdates();
+                    return 0;
+                }
                 return ui.DefWindowProcW(hwnd, msg, wparam, lparam);
             },
             ui.WM_CTLCOLOREDIT, ui.WM_CTLCOLORSTATIC => return self.fieldColors(wparam) orelse
@@ -1585,6 +1753,10 @@ const Window = struct {
             },
             ui.WM_TIMER => {
                 if (wparam == tick_id) self.tick();
+                if (wparam == clean_up_id) {
+                    _ = ui.KillTimer(hwnd, clean_up_id);
+                    update.cleanUp(self.gpa, self.io);
+                }
                 return 0;
             },
             // Sent for a great many things besides the theme, so the colours
@@ -1619,6 +1791,14 @@ const Window = struct {
             },
             wm_installed => {
                 self.installed(@enumFromInt(@as(u8, @truncate(wparam))));
+                return 0;
+            },
+            wm_update_checked => {
+                self.checked(@enumFromInt(wparam));
+                return 0;
+            },
+            wm_updated => {
+                self.updated(wparam == 1, @enumFromInt(@as(u8, @truncate(@as(usize, @bitCast(lparam))))));
                 return 0;
             },
             // An icon the worker had to open a file for has landed. Which rows

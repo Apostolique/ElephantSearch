@@ -112,7 +112,7 @@ pub fn main(init: std.process.Init) !void {
     }
     opts.startup.drives = drives.items;
 
-    try gui.run(gpa, opts);
+    try gui.run(gpa, init.io, opts);
 }
 
 /// Nothing here has a console to write to, so anything the user has to read

@@ -30,7 +30,7 @@ The first run reads every fixed NTFS drive, which takes about 10 seconds for 3 m
 
 You can right click `elephant-gui.exe` while it's open in the taskbar and pick "Pin to taskbar". If you drag the pin to the first slot, Windows+1 opens it from anywhere. Pressing Windows+1 again while it's in front minimizes it. The number follows the slot, so the third pin is Windows+3.
 
-The pin points at `elephant-gui.exe` where it is now, so it breaks if you move the folder or unzip a later release somewhere else.
+The pin points at `elephant-gui.exe` where it is now, so it breaks if you move the folder or unzip a later release somewhere else. [Update](#update) keeps it working.
 
 ## In a terminal
 
@@ -61,6 +61,14 @@ If the index ever looks wrong, `--rebuild` reads the drives again from scratch.
 ```
 elephant-gui --synthetic 300000
 ```
+
+## Update
+
+"Check for updates" is in the window menu, which opens with a right click on the title bar or with alt+space. It asks GitHub for the latest release, and only when you click it. If there's a newer one, it offers to download it, puts the new files in place of the old ones in the same folder, and opens the window again. With the service installed, Windows asks for administrator rights once so the service gets updated too.
+
+Since the folder stays the same, the taskbar pin and the Explorer menu entry keep working.
+
+To update by hand, close the window, copy the files from the new zip over the old ones, then run `elephant --install-service` again. It replaces the service in place, so there's no need to uninstall it first.
 
 ## Uninstall
 

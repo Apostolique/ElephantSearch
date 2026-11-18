@@ -6,7 +6,7 @@ Reading the master file table needs administrator rights. The service has them, 
 elephant --install-service
 ```
 
-That asks for administrator rights once, copies `elephant-service.exe` into `Program Files\ElephantSearch`, and starts it with Windows. Run it again after an update to replace the copy.
+That asks for administrator rights once, copies `elephant-service.exe` into `Program Files\ElephantSearch`, and starts it with Windows. "Check for updates" in the window menu replaces the copy when it updates. After updating by hand, run it again to do the same.
 
 ```
 elephant --uninstall-service

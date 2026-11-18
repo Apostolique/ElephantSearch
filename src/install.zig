@@ -88,6 +88,16 @@ pub fn apply(gpa: std.mem.Allocator, change: Change) Outcome {
     };
 }
 
+/// Whether the service is registered, running or not. Needs no administrator
+/// rights.
+pub fn isInstalled() bool {
+    const scm = w.OpenSCManagerW(null, null, w.SC_MANAGER_CONNECT) orelse return false;
+    defer _ = w.CloseServiceHandle(scm);
+    const svc = w.OpenServiceW(scm, pipe.service_name, w.SERVICE_QUERY_STATUS) orelse return false;
+    _ = w.CloseServiceHandle(svc);
+    return true;
+}
+
 fn install(gpa: std.mem.Allocator) Outcome {
     const from = explorer.besideThis(gpa, "elephant-service.exe") catch return .service_missing;
     defer gpa.free(from);
