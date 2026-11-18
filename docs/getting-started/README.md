@@ -26,6 +26,12 @@ The first run reads every fixed NTFS drive, which takes about 10 seconds for 3 m
 
 [Searching](../searching/README.md) covers what you can type.
 
+## Pin it to the taskbar
+
+You can right click `elephant-gui.exe` while it's open in the taskbar and pick "Pin to taskbar". If you drag the pin to the first slot, Windows+1 opens it from anywhere. Pressing Windows+1 again while it's in front minimizes it. The number follows the slot, so the third pin is Windows+3.
+
+The pin points at `elephant-gui.exe` where it is now, so it breaks if you move the folder or unzip a later release somewhere else.
+
 ## In a terminal
 
 `elephant.exe` is the same search in a terminal:
