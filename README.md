@@ -14,6 +14,7 @@ ElephantSearch reads the NTFS master file table directly instead of walking dire
 * Fuzzy terms, so `srcmainzg` finds `src\main.zig`
 * Exact, wildcard and full path terms
 * A window with Explorer's icons, sortable columns and Explorer's own right click menu
+* Drag a result out of the window and drop it on another program
 * The same search in a terminal, or once from a script
 * "Search with ElephantSearch" in Explorer's right click menu for folders and drives
 * A saved index that catches up on what changed since the last run

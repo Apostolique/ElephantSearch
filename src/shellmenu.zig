@@ -64,7 +64,7 @@ const ShellFolder = extern struct {
             [*]const *const w.ItemIdList,
             *const Guid,
             ?*u32,
-            *?*ContextMenu,
+            *?*anyopaque,
         ) callconv(.winapi) w.HRESULT,
     };
 };
@@ -202,6 +202,33 @@ const own = [_]struct { id: usize, label: []const u8 }{
     .{ .id = id_copy, .label = "Copy full path" },
 };
 
+/// Asks the folder holding `path` for one of the objects Explorer would use on
+/// that file, by interface id. The menu is one and the data a drag carries is
+/// another. Null when the shell would not describe the path. The caller owns
+/// the reference and releases it.
+pub fn uiObject(gpa: std.mem.Allocator, hwnd: ?ui.HANDLE, path: []const u8, iid: *const Guid) ?*anyopaque {
+    const wide = std.unicode.wtf8ToWtf16LeAllocZ(gpa, path) catch return null;
+    defer gpa.free(wide);
+
+    const pidl = w.ILCreateFromPathW(wide) orelse return null;
+    defer w.ILFree(pidl);
+
+    // These belong to the containing folder, which is the only thing that
+    // knows what the item in it is.
+    var folder: ?*ShellFolder = null;
+    var child: ?*const w.ItemIdList = null;
+    if (SHBindToParent(pidl, &IID_IShellFolder, &folder, &child) < 0) return null;
+    const parent = folder orelse return null;
+    defer _ = parent.vtable.release(parent);
+    // Points into `pidl`, so it is not freed separately.
+    const item = child orelse return null;
+
+    var found: ?*anyopaque = null;
+    const items = [_]*const w.ItemIdList{item};
+    if (parent.vtable.get_ui_object_of(parent, hwnd, 1, &items, iid, null, &found) < 0) return null;
+    return found;
+}
+
 pub const Menu = struct {
     /// The interface drawing the menu currently on screen, and null the rest of
     /// the time. Held across `show` because the menu's own modal loop is what
@@ -226,34 +253,8 @@ pub const Menu = struct {
         at: ui.Point,
         extended: bool,
     ) Choice {
-        const wide = std.unicode.wtf8ToWtf16LeAllocZ(gpa, path) catch return .unavailable;
-        defer gpa.free(wide);
-
-        const pidl = w.ILCreateFromPathW(wide) orelse return .unavailable;
-        defer w.ILFree(pidl);
-
-        // The menu belongs to the containing folder, which is the only thing
-        // that knows what the item in it is.
-        var folder: ?*ShellFolder = null;
-        var child: ?*const w.ItemIdList = null;
-        if (SHBindToParent(pidl, &IID_IShellFolder, &folder, &child) < 0) return .unavailable;
-        const parent = folder orelse return .unavailable;
-        defer _ = parent.vtable.release(parent);
-        // Points into `pidl`, so it is not freed separately.
-        const item = child orelse return .unavailable;
-
-        var found: ?*ContextMenu = null;
-        const items = [_]*const w.ItemIdList{item};
-        if (parent.vtable.get_ui_object_of(
-            parent,
-            hwnd,
-            1,
-            &items,
-            &IID_IContextMenu,
-            null,
-            &found,
-        ) < 0) return .unavailable;
-        const menu = found orelse return .unavailable;
+        const object = uiObject(gpa, hwnd, path, &IID_IContextMenu) orelse return .unavailable;
+        const menu: *ContextMenu = @ptrCast(@alignCast(object));
         defer _ = menu.vtable.release(menu);
 
         const popup = ui.CreatePopupMenu() orelse return .unavailable;

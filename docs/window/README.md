@@ -18,6 +18,12 @@ Names compare one character at a time, so `page10.txt` lands above `page9.txt`.
 
 Right clicking a result shows Explorer's own menu for that file, so "Open with", "Send to", "Properties" and whatever your other programs added are all there. Open, open path and copy full path are on top.
 
+## Drag and drop
+
+You can drag a result out of the window and drop it on another program, the same as dragging it out of Explorer. For example, drop a markdown file on VS Code to open it there, or drop it in an Explorer folder.
+
+Dropping in a folder does what Explorer would do, so it moves the file when that folder is on the same drive and copies it otherwise. Hold ctrl to copy, shift to move, or alt to make a shortcut. Dragging with the right button asks which one when you let go.
+
 ## Position
 
 The window opens where you last closed it, at the same size and maximized if it was. If that spot was on a screen that's no longer plugged in, it opens on one that is. The position is kept in `%LOCALAPPDATA%\ElephantSearch\window.txt`, so deleting that file puts it back to the default.

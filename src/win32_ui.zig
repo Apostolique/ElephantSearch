@@ -158,8 +158,8 @@ pub const NmLvCustomDraw = extern struct {
     align_: u32,
 };
 
-/// What a list view says about a row it is reporting on. Only `sub_item`
-/// matters here, and only for `LVN_COLUMNCLICK`, where it is the column.
+/// What a list view says about a row it is reporting on. `sub_item` is the
+/// column for `LVN_COLUMNCLICK`, and `item` the row for the drag notifications.
 pub const NmListView = extern struct {
     hdr: NmHdr,
     item: i32,
@@ -834,6 +834,8 @@ fn code(n: i32) u32 {
 
 pub const LVN_ITEMCHANGED = code(-100 - 1);
 pub const LVN_COLUMNCLICK = code(-100 - 8);
+pub const LVN_BEGINDRAG = code(-100 - 9);
+pub const LVN_BEGINRDRAG = code(-100 - 11);
 pub const LVN_GETDISPINFOW = code(-100 - 77);
 pub const LVN_BEGINLABELEDITW = code(-100 - 75);
 pub const LVN_ENDLABELEDITW = code(-100 - 76);

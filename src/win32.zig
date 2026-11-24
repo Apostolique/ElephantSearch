@@ -428,6 +428,8 @@ pub const COINIT_APARTMENTTHREADED: u32 = 0x2;
 
 pub extern "ole32" fn CoInitializeEx(pvReserved: ?*anyopaque, dwCoInit: u32) callconv(.winapi) HRESULT;
 pub extern "ole32" fn CoUninitialize() callconv(.winapi) void;
+pub extern "ole32" fn OleInitialize(pvReserved: ?*anyopaque) callconv(.winapi) HRESULT;
+pub extern "ole32" fn OleUninitialize() callconv(.winapi) void;
 
 /// Returns a fake HINSTANCE. Anything above 32 means the shell took it.
 pub extern "shell32" fn ShellExecuteW(

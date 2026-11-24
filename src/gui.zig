@@ -20,6 +20,7 @@ const mft = @import("mft.zig");
 const search = @import("search.zig");
 const shell = @import("shell.zig");
 const shellmenu = @import("shellmenu.zig");
+const drag = @import("drag.zig");
 const sizer_mod = @import("sizer.zig");
 const startup = @import("startup.zig");
 const theme = @import("theme.zig");
@@ -160,10 +161,11 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, opts: Options) !void {
     _ = ui.InitCommonControlsEx(&icc);
 
     // The shell's context menu runs on the thread that shows it, and wants COM
-    // up for as long as the window is there to show one. S_FALSE means it
+    // up for as long as the window is there to show one. Dragging a result out
+    // wants OLE on top of that, which brings COM up with it. S_FALSE means it
     // already was, and both of those still owe an uninitialise.
-    const com = w.CoInitializeEx(null, w.COINIT_APARTMENTTHREADED);
-    defer if (com >= 0) w.CoUninitialize();
+    const ole = w.OleInitialize(null);
+    defer if (ole >= 0) w.OleUninitialize();
 
     var index = idx.Index.init(gpa);
     defer index.deinit();
@@ -254,6 +256,9 @@ const Window = struct {
     /// when the editor closes, and by then the results can have been rebuilt
     /// under it, which would leave the same row standing for another file.
     renaming: ?u32 = null,
+    /// A result is being dragged out of the window. The drag runs its own
+    /// message loop, and like an open menu it holds the results still.
+    dragging: bool = false,
     dpi: u32 = 96,
     /// Set while the window is being put back where it last closed. The
     /// saved rect is already the right size for the screen it is on, so a
@@ -1143,6 +1148,22 @@ const Window = struct {
         }
     }
 
+    /// The list view only says a drag started once the pointer has moved far
+    /// enough with a button down, so this always starts with one held.
+    fn dragRow(self: *Window, row: usize) void {
+        // Taken before the drag starts, for the same reason as the menu: the
+        // results underneath could be rebuilt while it runs.
+        var path_buf: [32 * 1024]u8 = undefined;
+        const entry = self.entryAt(row) orelse return;
+        const path = self.index.path(entry, &path_buf);
+
+        self.dragging = true;
+        defer self.dragging = false;
+        if (drag.run(self.gpa, self.hwnd, path) == .unavailable) {
+            self.say("Windows cannot drag {s}", .{baseName(path)});
+        }
+    }
+
     fn beginRename(self: *Window) void {
         const row = self.selectedRow() orelse return;
         _ = ui.SetFocus(self.list);
@@ -1834,6 +1855,10 @@ const Window = struct {
                 const info: *ui.NmListView = @ptrCast(hdr);
                 if (info.sub_item >= 0) self.clickColumn(@intCast(info.sub_item));
             },
+            ui.LVN_BEGINDRAG, ui.LVN_BEGINRDRAG => {
+                const info: *ui.NmListView = @ptrCast(hdr);
+                if (info.item >= 0) self.dragRow(@intCast(info.item));
+            },
             ui.NM_DBLCLK => self.openSelected(shiftDown()),
             ui.NM_RETURN => self.openSelected(shiftDown()),
             ui.NM_CUSTOMDRAW => return self.drawRow(@ptrCast(hdr)),
@@ -2125,7 +2150,7 @@ const Window = struct {
         }
         // Rebuilding the results under an open menu would move the row it is
         // pointing at. Whatever the journal has can wait for it to close.
-        if (self.menu.isOpen() or self.renaming != null) return;
+        if (self.menu.isOpen() or self.renaming != null or self.dragging) return;
 
         // Windows writes files all the time on its own, so folding the journal
         // in on every tick would re-search several times a second for changes
